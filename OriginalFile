@@ -1,0 +1,167 @@
+/* BASE CODE INSPIRATION:
+Listening Machines - Week 1
+Audio-Reactive Visual Example - Drawing Amplitude: Particles
+by Michael Simpson
+
+I THEN MADE MAJOR MODIFICATIONS TO THE LOOK AND FEEL OF THE OUTPUT. 
+*/
+
+// UI Objects
+let startMicButton, speedSlider, sizeSlider, smoothingSlider;
+
+// WebAudio Context
+let audioContext;
+
+// Mircrophone
+let mic;
+let micStarted = false;
+
+// Time - we'll use this for keeping time during our sketch
+let startTime;
+
+// Lasts - we use these for smoothing
+let lastVolume = 0.0;
+let lastX = 0.0;
+let lastY = 0.0;
+
+let numberOfParticles = 15;
+let particles = [];
+
+// Override windowResized to automatically resize when adjusting the window
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
+
+
+// Start/Stop Mic Function for Button
+function startMic() {
+  if (!micStarted) {
+    // if it wasn't started, start the microphone and turn the button green
+    getAudioContext().resume();
+    mic.start();
+    startMicButton.style("background-color", "green");
+  } else { 
+    // else we stop the microphone and turn the button red
+    mic.stop();    
+    startMicButton.style("background-color", "red");
+  }
+
+  // flip the micStarted value so it is opposite what it was when it was clicked
+  micStarted = !micStarted;
+}
+
+// --------------------------------------------------------------------------------
+// Setup
+
+function setup() {
+  // use windowWidth and windowHeight to stretch the canvas to the full window
+  createCanvas(windowWidth, windowHeight);
+
+  // Declares our audioContext variable allowing us to tap into the Audio Thread's timing
+  audioContext = getAudioContext();
+  
+  // creates an input object so we can access the computer audio input
+  mic = new p5.AudioIn();
+    
+  // Starts and stops the microphone
+  startMicButton = createButton("Start/Stop Mic")
+  startMicButton.position(20, 10);
+  startMicButton.mousePressed(startMic);
+  
+  // Adjusts smoothing amount
+  smoothingSlider = createSlider(0.01, 0.99, 0.5, 0.01);
+  smoothingSlider.position(10, 80);
+  smoothingSlider.style("width", "150px");
+
+  // Adjusts amount to scale the Y-axis, use this to adjust for lower volume input
+  scaleSlider = createSlider(0.5, 10, 1.0, 0.1);
+  scaleSlider.position(10, 100);
+  scaleSlider.style("width", "150px");
+  
+  for(let i = 0; i < numberOfParticles; i++){
+    particles.push({
+      x: 0,
+      y: i*(windowHeight/numberOfParticles),
+      angle: 0,
+      speed: 2,
+      size: 5,
+    });
+  }
+  
+  // set the startTime to audio thread's currentTime
+  startTime = audioContext.currentTime;
+
+  // clear the screen so it's black on startup
+  noStroke();
+  background(0);
+  
+  // Initialize these variables we use for smoothing to all start with 0.0
+  lastVolume = 0.0;
+  lastX = 0.0;
+  lastY = 0.0;
+}
+
+// --------------------------------------------------------------------------------
+// Draw
+function updateParticles(volume){
+  // For each particle in the array
+  for(let p = 0; p < particles.length; p++){
+    particles[p].speed = 1.5;
+    // Check if that particle's speed is greater than 0.2
+    // if(particles[p].speed > 1.0){
+    //   // if it is subtract 0.25 from the speed
+    //   particles[p].speed -= 0.5;
+    // } else {
+    //   // if it's not, set it to zero
+    //   particles[p].speed = 1.0;
+    // }
+
+
+    // Calculates X and Y position based off angle and speed, wrap around at borders using modulus
+    particles[p].x = (particles[p].x + particles[p].speed * cos(radians(particles[p].angle))) % windowWidth;    
+    particles[p].y = (particles[p].y + particles[p].speed * sin(radians(particles[p].angle))) % windowHeight;    
+  }
+}
+
+function drawParticles(volume){
+  // For each particle in our array
+  for(let p = 0; p < particles.length; p++){
+    // set the fill to white
+    fill(200);    
+    
+    // set the ellipseSize based off the volume
+    //let ellipseSize = map(volume,0.0,1.0,2,200);
+    let rectangleSize = map(volume, 0.0, 1.0, 2, 200)
+    //draw the particles as ellipses
+    //ellipse(particles[p].x, particles[p].y, ellipseSize, ellipseSize);
+    rect(particles[p].x, particles[p].y, rectangleSize, rectangleSize)
+  }
+}
+
+function draw() {
+  // Clear the background with some transparency for motion blur
+  background(0,1);  
+  
+  // elapsedTime is based off the audio thread's timing, this will become more important in the future
+  let elapsedTime = audioContext.currentTime - startTime;
+  
+  // Draw the GUI labels and current values
+  fill(255);
+  text("Smoothing: " + smoothingSlider.value(), 170, 93);
+  text("Scale: " + scaleSlider.value(), 170, 113);   
+
+  // Check if the mic is started to make sure we dont get any NaN values in our data stream
+  if(micStarted){
+    // Smooth out the micVolume readings using the lastVolume and current volume from mic.getLeve()
+    let micVolume = lerp(lastVolume, mic.getLevel() * scaleSlider.value(), smoothingSlider.value());
+
+    // Set lastVolume to be the current micVolume value for future smoothing
+    lastVolume = micVolume;
+    
+    // update the particle positions
+    updateParticles(micVolume);
+  
+    // draw the particles on screen
+    drawParticles(micVolume*5);
+  }
+}
